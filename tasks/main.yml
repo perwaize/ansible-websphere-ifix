@@ -1,0 +1,105 @@
+---
+- name: Get wasHome
+  shell: "ls -d /apps/*was*/AppServer"
+  register: wasHome 
+
+- name: Get JVM profile path
+  shell: "ls /apps/*was*/AppServer/profiles/ | grep \"\\-node\""
+  register: jvmProfileName
+
+- name: Get current running JVMs
+  shell: "ps -ef | grep java | grep AppServer | grep -v dmgr | grep -v nodeagent | awk \'{print $NF}\'"
+  register: runningJVMs
+
+- name: Get dmgr profile path
+  shell: "ls /apps/*was*/AppServer/profiles/ | grep \"\\-dmgr\""
+  register: dmgrProfileName
+  ignore_errors: yes
+
+- name: Stop the JVMs
+  shell: "{{ wasHome.stdout }}/bin/stopServer.sh -profileName {{ jvmProfileName.stdout }} {{ item }}"
+  loop: "{{ runningJVMs.stdout.split() }}"
+
+- name: Stop the nodeAgent
+  shell: "{{ wasHome.stdout }}/bin/stopNode.sh -profileName {{ jvmProfileName.stdout }}"
+  ignore_errors: yes
+
+- name: Stop the deploymentManager
+  shell: "{{ wasHome.stdout }}/bin/stopManager.sh -profileName {{ dmgrProfileName.stdout }}"
+  ignore_errors: yes 
+
+- name: KillAll Java
+  shell: "killall -9 java"  
+  ignore_errors: yes
+
+- name: Get WAS version
+  shell: "/apps/*was*/AppServer/bin/versionInfo.sh  -fixpacks | grep Version | tail -1 | awk  \'{print $NF}\'"  
+  register: wasVersion
+
+- name: Print WAS version
+  debug:
+    msg: "WAS Version: {{ wasVersion.stdout }}"
+  
+- name: Copy the 8.5.5 ifix to remote server
+  copy:
+    src: "{{ nasPath }}/{{ iFix855zip }}"
+    dest: "{{ tmpPath }}"
+    mode: '0777'
+  when: wasVersion.stdout.startswith('8.5.5') 
+
+- name: Install 8.5.5 ifix
+  shell: "{{ imcl }} install {{ iFix855ID }} -repositories {{ tmpPath }}/{{ iFix855zip }} -installationDirectory {{ wasHome.stdout }} -showProgress > {{ appTmpLog }}"
+  when: wasVersion.stdout.startswith('8.5.5')  
+
+- name: Check 8.5.5 ifix
+  shell: "{{ wasHome.stdout }}/bin/versionInfo.sh -ifixes | grep {{ iFix855ID }} | grep Package"
+  register: iFixVerify
+  when: wasVersion.stdout.startswith('8.5.5') 
+
+- name: Print iFix Info on 8.5.5
+  debug:
+    msg: "{{ iFixVerify.stdout_lines }}"
+  when: wasVersion.stdout.startswith('8.5.5') 
+
+- name: Copy the 9.0.5 ifix to remote server
+  copy:
+    src: "{{ nasPath }}/{{ iFix905zip }}"
+    dest: "{{ tmpPath }}"
+    mode: '0777'
+  when: wasVersion.stdout.startswith('9.0.5') 
+
+- name: Install 9.0.5 ifix
+  shell: "{{ imcl }} install {{ iFix905ID }} -repositories {{ tmpPath }}/{{ iFix905zip }} -installationDirectory {{ wasHome.stdout }} -showProgress > {{ appTmpLog }}"
+  when: wasVersion.stdout.startswith('9.0.5') 
+
+- name: Check 9.0.5 ifix
+  shell: "{{ wasHome.stdout }}/bin/versionInfo.sh -ifixes | grep {{ iFix905ID }} | grep Package"
+  register: iFixVerify
+  when: wasVersion.stdout.startswith('9.0.5')   
+
+- name: Print iFix Info on 9.0.5
+  debug:
+    msg: "{{ iFixVerify.stdout_lines }}"
+  when: wasVersion.stdout.startswith('9.0.5') 
+
+- name: Start the deploymentManager
+  shell: "{{ wasHome.stdout }}/bin/startManager.sh -profileName {{ dmgrProfileName.stdout }}"
+  ignore_errors: yes 
+
+- name: Check if dojo.zip exist
+  stat:
+    path: "/apps/*-was*/AppServer/profiles/*dmgr*/config/cells/*-cell*/applications/isclite.ear/deployments/isclite/isclite.war/WEB-INF/dojo.zip"
+  register: dojoFile
+
+- name: Remove dojo.zip if exist
+  shell: "{{ wasHome.stdout }}/bin/wsadmin.sh -lang jython -c \"AdminApp.update(\'isclite\', \'file\', \'[-operation update -contents {{ wasHome.stdout }}/systemApps/isclite.ear/isclite.war/WEB-INF/dojo.zip -contenturi isclite.war/WEB-INF/dojo.zip]\')
+  \""
+  when: dojoFile.stat.exists
+
+- name: Start the nodeAgent
+  shell: "{{ wasHome.stdout }}/bin/startNode.sh -profileName {{ jvmProfileName.stdout }}"
+  ignore_errors: yes
+
+- name: Start the JVMs
+  shell: "{{ wasHome.stdout }}/bin/startServer.sh -profileName {{ jvmProfileName.stdout }} {{ item }}"
+  loop: "{{ runningJVMs.stdout.split() }}"  

@@ -1,0 +1,9 @@
+---
+nasPath: "/wasnas/WebSphere/v8.5.5/iFix"
+iFix855zip: "8.5.5.10-ws-wasprod-ifph43148.zip"
+iFix905zip: "9.0.5.3-ws-wasprod-ifph43148.zip"
+tmpPath: "/tmp"
+imcl: "/apps/InstallationManager/eclipse/tools/imcl"
+iFix855ID: "8.5.5.10-WS-WASProd-IFPH43148"
+iFix905ID: "9.0.5.3-WS-WASProd-IFPH43148"
+appTmpLog: "/apps/tmp/IFPH43148.log"
